@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainy Window</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+       
+  frameRate(60); }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 100vh;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            pointer-events: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+  <button id="fs-toggle">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M1.5 1H6v1.5H3v3H1.5V1zM10 1h4.5v4.5H13v-3h-3V1zM1.5 10.5H3v3h3V15H1.5v-4.5zM13 13.5v-3h1.5V15H10v-1.5h3z"></path>
+    </svg>
+  </button>
+    <div id="canvas-container">
+        <div id="info">Touch/drag to wipe the window</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <script>
+        const sketch = (p) => {
+            let rainDrops = [];
+            let wipedAreas = [];
+            let windowCondensation = [];
+            let lightningTimer = 0;
+            let isDaytime = true;
+            let rainIntensity = 0.5;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+            let canvas;
+            
+            p.setup = function() {
+                canvas = p.createCanvas(p.min(p.windowWidth, 1200), p.windowHeight);
+                canvas.parent('canvas-container');
+                p.colorMode(p.HSB, 360, 100, 100, 1);
+                
+                // Initialize rain drops
+                for (let i = 0; i < 500; i++) {
+                    rainDrops.push(new RainDrop());
+                }
+                
+                // Initialize condensation
+                for (let i = 0; i < 200; i++) {
+                    windowCondensation.push(new Condensation());
+                }
+                
+                // Random day/night
+                isDaytime = p.random() > 0.5;
+                
+                // Set initial rain intensity
+                rainIntensity = p.random(0.3, 0.8);
+            };
+            
+            p.draw = function() {
+                // Background based on day/night
+                if (isDaytime) {
+                    p.background(210, 30, 90);
+                } else {
+                    p.background(240, 50, 20);
+                }
+                
+                // Draw outside view
+                drawOutsideView();
+                
+                // Draw window frame
+                drawWindowFrame();
+                
+                // Update and draw rain
+                updateRain();
+                
+                // Update and draw condensation
+                updateCondensation();
+                
+                // Update and draw wiped areas
+                updateWipedAreas();
+                
+                // Random lightning
+                if (p.frameCount % 120 == 0 && p.random() < 0.1) {
+                    lightningTimer = 15;
+                }
+                
+                if (lightningTimer > 0) {
+                    drawLightning();
+                    lightningTimer--;
+                }
+                
+                // Show wipe effect when dragging
+                if (p.mouseIsPressed) {
+                    wipedAreas.push({
+                        x: p.mouseX,
+                        y: p.mouseY,
+                        size: 100,
+                        life: 100
+                    });
+                    
+                    // Create a trail between current and last mouse position
+                    if (lastMouseX !== 0 && lastMouseY !== 0) {
+                        const steps = p.dist(p.mouseX, p.mouseY, lastMouseX, lastMouseY) / 5;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = p.lerp(lastMouseX, p.mouseX, t);
+                            const y = p.lerp(lastMouseY, p.mouseY, t);
+                            wipedAreas.push({
+                                x: x,
+                                y: y,
+                                size: 80,
+                                life: 80
+                            });
+                        }
+                    }
+                }
+                
+                lastMouseX = p.mouseX;
+                lastMouseY = p.mouseY;
+            };
+            
+            function drawOutsideView() {
+                // Draw distant landscape
+                p.noStroke();
+                if (isDaytime) {
+                    p.fill(210, 50, 70);
+                } else {
+                    p.fill(240, 60, 30);
+                }
+                
+                // Mountains
+                p.beginShape();
+                p.vertex(0, p.height * 0.7);
+                p.vertex(p.width * 0.2, p.height * 0.5);
+                p.vertex(p.width * 0.4, p.height * 0.6);
+                p.vertex(p.width * 0.6, p.height * 0.4);
+                p.vertex(p.width * 0.8, p.height * 0.55);
+                p.vertex(p.width, p.height * 0.65);
+                p.vertex(p.width, p.height);
+                p.vertex(0, p.height);
+                p.endShape(p.CLOSE);
+                
+                // Some trees/buildings
+                for (let i = 0; i < 10; i++) {
+                    const x = p.random(p.width);
+                    const h = p.random(50, 150);
+                    if (isDaytime) {
+                        p.fill(120, 60, 40);
+                    } else {
+                        p.fill(240, 40, 30);
+                    }
+                    p.rect(x, p.height * 0.7 - h, 10, h);
+                }
+            }
+            
+            function drawWindowFrame() {
+                // Window frame
+                p.stroke(40, 30, 30);
+                p.strokeWeight(10);
+                p.noFill();
+                p.rect(0, 0, p.width, p.height);
+                
+                // Window dividers
+                p.strokeWeight(4);
+                p.line(p.width/2, 0, p.width/2, p.height);
+                p.line(0, p.height/2, p.width, p.height/2);
+            }
+            
+            function updateRain() {
+                // Add new rain drops based on intensity
+                if (p.frameCount % p.floor(p.map(rainIntensity, 0, 1, 30, 5)) == 0) {
+                    if (rainDrops.length < 800) {
+                        rainDrops.push(new RainDrop());
+                    }
+                }
+                
+                // Update and draw rain drops
+                for (let i = rainDrops.length - 1; i >= 0; i--) {
+                    rainDrops[i].update();
+                    rainDrops[i].display();
+                    
+                    // Remove drops that are off screen
+                    if (rainDrops[i].y > p.height + 10) {
+                        rainDrops.splice(i, 1);
+                    }
+                }
+            }
+            
+            function updateCondensation() {
+                // Add new condensation
+                if (p.frameCount % 10 == 0 && windowCondensation.length < 300) {
+                    windowCondensation.push(new Condensation());
+                }
+                
+                // Update and draw condensation
+                for (let i = windowCondensation.length - 1; i >= 0; i--) {
+                    windowCondensation[i].update();
+                    windowCondensation[i].display();
+                    
+                    // Remove old condensation
+                    if (windowCondensation[i].life <= 0) {
+                        windowCondensation.splice(i, 1);
+                    }
+                }
+            }
+            
+            function updateWipedAreas() {
+                // Draw wiped areas (clear spots on window)
+                for (let i = wipedAreas.length - 1; i >= 0; i--) {
+                    const wipe = wipedAreas[i];
+                    
+                    // Draw wipe effect
+                    p.noStroke();
+                    p.fill(0, 0, 100, 0.1);
+                    p.ellipse(wipe.x, wipe.y, wipe.size);
+                    
+                    // Reduce life
+                    wipe.life--;
+                    wipe.size *= 0.98;
+                    
+                    // Remove when life is over
+                    if (wipe.life <= 0) {
+                        wipedAreas.splice(i, 1);
+                    }
+                }
+            }
+            
+            function drawLightning() {
+                p.blendMode(p.ADD);
+                p.fill(210, 20, 100, 0.3);
+                p.rect(0, 0, p.width, p.height);
+                p.blendMode(p.BLEND);
+            }
+            
+            class RainDrop {
+                constructor() {
+                    this.reset();
+                    this.speed = p.random(5, 15) * rainIntensity;
+                }
+                
+                reset() {
+                    this.x = p.random(p.width);
+                    this.y = p.random(-100, -10);
+                    this.length = p.random(10, 30) * rainIntensity;
+                    this.thickness = p.random(0.5, 2);
+                    this.angle = p.random(-0.1, 0.1);
+                }
+                
+                update() {
+                    this.y += this.speed;
+                    this.x += p.sin(this.angle) * 2;
+                    
+                    // Check if drop hits a wiped area
+                    for (let wipe of wipedAreas) {
+                        if (p.dist(this.x, this.y, wipe.x, wipe.y) < wipe.size/2) {
+                            // Splash effect
+                            for (let i = 0; i < 3; i++) {
+                                windowCondensation.push(new Splash(this.x, this.y));
+                            }
+                            this.reset();
+                            break;
+                        }
+                    }
+                }
+                
+                display() {
+                    p.stroke(210, 50, 80, 0.8);
+                    p.strokeWeight(this.thickness);
+                    p.line(this.x, this.y, this.x + p.sin(this.angle) * 5, this.y + this.length);
+                }
+            }
+            
+            class Condensation {
+                constructor() {
+                    this.x = p.random(p.width);
+                    this.y = p.random(p.height);
+                    this.size = p.random(2, 10);
+                    this.life = p.random(50, 200);
+                    this.growthRate = p.random(0.01, 0.05);
+                }
+                
+                update() {
+                    // Grow over time
+                    this.size += this.growthRate;
+                    
+                    // Slowly fade away
+                    this.life--;
+                    
+                    // Check if in wiped area
+                    for (let wipe of wipedAreas) {
+                        if (p.dist(this.x, this.y, wipe.x, wipe.y) < wipe.size/2) {
+                            this.life -= 5;
+                        }
+                    }
+                }
+                
+                display() {
+                    const alpha = p.map(this.life, 200, 0, 0.3, 0);
+                    p.noStroke();
+                    p.fill(210, 10, 100, alpha);
+                    p.ellipse(this.x, this.y, this.size);
+                }
+            }
+            
+            class Splash {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.size = p.random(1, 3);
+                    this.life = p.random(10, 30);
+                    this.angle = p.random(p.TWO_PI);
+                    this.speed = p.random(0.5, 2);
+                    this.xVel = p.cos(this.angle) * this.speed;
+                    this.yVel = p.sin(this.angle) * this.speed;
+                }
+                
+                update() {
+                    this.x += this.xVel;
+                    this.y += this.yVel;
+                    this.life--;
+                    this.size *= 0.95;
+                }
+                
+                display() {
+                    p.noStroke();
+                    p.fill(210, 30, 100, p.map(this.life, 30, 0, 0.5, 0));
+                    p.ellipse(this.x, this.y, this.size);
+                }
+            }
+            
+            p.windowResized = function() {
+                p.resizeCanvas(p.min(p.windowWidth, 1200), p.windowHeight);
+            };
+            
+            p.mousePressed = function() {
+                // Change day/night on click
+                if (p.mouseButton === p.RIGHT) {
+                    isDaytime = !isDaytime;
+                }
+                
+                // Change rain intensity on middle click
+                if (p.mouseButton === p.CENTER) {
+                    rainIntensity = p.random(0.3, 0.9);
+                }
+            };
+            
+            p.touchStarted = function() {
+                // On mobile, long press to change day/night
+                if (p.touches.length === 1) {
+                    setTimeout(() => {
+                        if (p.touches.length === 1) {
+                            isDaytime = !isDaytime;
+                        }
+                    }, 1000);
+                }
+                return false;
+            };
+        };
+        
+        new p5(sketch);
+    
+  // Fullscreen toggle
+  document.getElementById('fs-toggle').addEventListener('click', function() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.log('Fullscreen request failed: ', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  });
+  
+  // Hide fullscreen button after inactivity
+  const fsButton = document.getElementById('fs-toggle');
+  let timeout;
+  document.addEventListener('mousemove', function() {
+    fsButton.style.opacity = '0.3';
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      fsButton.style.opacity = '0';
+    }, 2000);
+  });
+  </script>
+
+              
+          
+                
+          
+              
